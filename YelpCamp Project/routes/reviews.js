@@ -2,28 +2,17 @@ const express = require('express');
 const router = express.Router({mergeParams: true}); //mergeParams is to get access to all params
 
 const catchAsync = require('../utils/catchAsync');
-const ExpressError = require('../utils/ExpressError');
-
-const { reviewSchema } = require('../schemas.js');
+const { validateReview , isLoggedIn, isReviewAuthor } = require('../middleware');
 
 const Campground = require('../models/campground');
 const Review = require('../models/review')
 
-const validateReview = (req, res, next) => { // middlware to handle validations using joi 
-    const { error } = reviewSchema.validate(req.body);
-    if(error){
-        const msq = error.details.map(el => el.message).join(',');
-        throw new ExpressError(msq, 400)
-    }
-    else{
-        next();
-    }
-}
 
-router.post('/', validateReview, catchAsync(async(req, res) => {
+router.post('/', isLoggedIn, validateReview, catchAsync(async(req, res) => {
     const { id } = req.params;
     const campground = await Campground.findById(id);
     const review = new Review(req.body.review);
+    review.author = req.user._id;
     campground.reviews.push(review);
     await review.save();
     await campground.save();
@@ -32,7 +21,7 @@ router.post('/', validateReview, catchAsync(async(req, res) => {
 
 }))
 
-router.delete('/:reviewId', catchAsync(async(req, res) => {
+router.delete('/:reviewId', isLoggedIn, isReviewAuthor, catchAsync(async(req, res) => {
     const { id, reviewId} = req.params;
     await Campground.findByIdAndUpdate(id, {$pull: {reviews: reviewId}});
     await Review.findById(reviewId);
